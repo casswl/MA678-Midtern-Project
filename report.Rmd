@@ -1,0 +1,216 @@
+---
+title: "Report of MA678 Midterm Project"
+author: "Peng Liu"
+date: "2021/12/09"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+source("wrangling.R")
+
+library(ggplot2)
+library(dplyr)
+library(plyr)
+library(forcats)
+library(GGally)
+library(arm)
+library(ggcorrplot)
+library(lattice)
+library(mlmRev)
+library(lme4)
+library(rstanarm)
+library(gvlma)
+#library(lmerTest)
+
+```
+
+# Abstract
+
+  Unlike other video media sites, Netflix does not have its scoring system. In addition to Netflix's fitness system, IMDb may be a good reference factor. In this report, I will find the connection between them by establishing a multi-level model of IMDb scores and other film-related factors. This report includes five parts: introduction, methods, results, and discussion.
+  
+# Introduction
+
+  As a pioneer in the streaming media service industry, Netflix has become the media company with the most extensive coverage globally in recent years. However, what is interesting is that, unlike other video sites, Netflix does not have a scoring system. Except for Netflix's recommendation system, how will the public choose movies to watch? IMDb is an authoritative and well-known movie website. The score is believed to be a good reference for the audience.
+  For this, I chose the "Latest Netflix data with 26+ connection attributes" dataset. This is a very comprehensive data set that includes sources from Netflix, Rotten Tomatoes, IMBD, posters, box office information, trailers on YouTube, and more sources using various APIs. I want to use a multi-level model to see which factors affect the IMBD scores of movies on Netflix.
+
+
+# Method
+
+## Data cleaning
+
+  I use the data set is Latest Netflix data with 26+ joined attributes on Kaggle. This is a vast data set containing movies released on Netflix from 2015 to 2021. This information includes APIs from data sources such as Netflix, Rotten Tomatoes, IMBD, posters, box office information, YouTube trailers, a total of 15,071 unique values. I cleaned the data. I first narrowed the scope of the data to the release time and the release time on Netflix between 2018 and 2021 and removed the missing value in the IMDb Score. Next, I processed the text part of the data set, counted the genres, tags, language, and type of the movie in the data, and removed the missing value. In the end, the data set changed from 15,071 observations and 29 columns to 3496 observations and 14 columns.
+  
+| column names            | explanation |
+| :-----                  | :----- |
+| Title                   | Title of the movie |
+| Major.Genre             | The major genres |
+| Series.or.Movie         | TV Series or More  |
+| IMDb.Score              | Score from IMDb |
+| Rotten.Tomatoes.Score   | Score from Rotten Tomatoes |
+| Metacritic.Score        | Score from Metacritic |
+| Awards.Received         | The number of Awards Received |
+| Awards.Nominated.For    | The number of Awards Nominated |
+| IMDb.Votes              | Votes on IMDb |
+| num.Genre               | The number of genres |
+|                         |                     |
+| num.tags                | The number of tags |
+| num.country             | The number of Netflix country availability |
+| Runtime_1hour           | Runtime large than 1 hour or not |
+| num.Lang                | The number of available languages on Netflix |
+
+# EDA
+
+  Regarding the EDA part, first, I made a corrplot to show the correlation between these variables. Figure 1 shows that the correlation between IMDb Score and other variables is primarily positive, except for runtime and languages. Among them, nominations, awards, IMDb Votes, and the country's number are the most influential factors. Therefore, I will visualize the relationship between IMDb Score and these variables.
+  
+```{r out.width="70%", fig.cap="Figure 1: correlation of variables ",fig.align  = 'center'}
+#correlation p value 
+p.mat = cor_pmat(netflix2)
+ggcorrplot(cor(netflix2), hc.order = TRUE,lab = TRUE,type = "upper", p.mat=p.mat,insig = "blank",lab_size = 3,tl.cex = 7)
+
+```
+      
+  In order to find the correlation between IMDb Score and other variables, I drew some scatter plots to find the correlation between them. Because movies can be divided into movies and TV series, I will divide the following pictures into two groups: movies and series. 
+```{r fig.height = 3,fig.align  = 'center'}
+ggplot(data = netflix1)+
+  geom_point(aes(x= log(IMDb.Score),y = log(IMDb.Votes),color = Major.Genre),alpha = 0.3)+
+  labs(x="log(IMDb.Score)",y="log(IMDb.Votes)")+
+  geom_smooth(aes(x= log(IMDb.Score),y = log(IMDb.Votes),color = Major.Genre),method = "lm",se=F,formula = y~x)+
+  theme(legend.key.size = unit(0.1, 'cm'),
+        legend.position="top")+
+  facet_wrap(~factor(Series.or.Movie))
+
+```
+
+```{r fig.height = 2,fig.align  = 'center'}
+ggplot(data = netflix1)+
+  geom_point(aes(y= log(IMDb.Score),x = log(1+Rotten.Tomatoes.Score),color = Major.Genre),alpha = 0.5)+
+  labs(x="log(IMDb.Score)",y="log(1+Rotten.Tomatoes.Score)")+
+  geom_smooth(aes(y= log(IMDb.Score),x = log(1+Rotten.Tomatoes.Score),color = Major.Genre),method = "lm",se=F,formula = y~x)+
+  theme(legend.position = "none")+
+  facet_wrap(~factor(Series.or.Movie))
+
+```
+```{r fig.height = 2,fig.align  = 'center'}
+ggplot(data = netflix1)+
+  geom_point(aes(y= log(IMDb.Score),x = log(1+Awards.Nominated.For),color = Major.Genre),alpha = 0.5)+
+  labs(x="log(IMDb.Score)",y="log(1+Awards.Nominated.For)")+
+  geom_smooth(aes(y= log(IMDb.Score),x = log(1+Awards.Nominated.For),color = Major.Genre),method = "lm",se=F,formula = y~x)+
+  theme(legend.position = "none")+
+  facet_wrap(~factor(Series.or.Movie))
+
+```
+```{r fig.height = 2,fig.align  = 'center'}
+ggplot(data = netflix1)+
+  geom_point(aes(y= log(IMDb.Score),x = log(num.country),color = Major.Genre),alpha = 0.5)+
+  labs(x="log(IMDb.Score)",y="log(num.country)")+
+  geom_smooth(aes(y= log(IMDb.Score),x = log(num.country),color = Major.Genre),method = "lm",se=F,formula = y~x)+
+  theme(legend.position = "none")+
+  facet_wrap(~factor(Series.or.Movie))
+```
+
+   It can be seen that in these two groups, the slopes of most genres are similar, although the intercept varies due to the difference in the count of genres.
+   The intercepts of Figure 1 and Figure 3 are positively correlated. What's interesting is that the intercepts of the Rotten Tomatoes score and IMDb score in Figure 2 are in a relatively ambiguous state in the film group, and they cannot be accurately judged. There is a correlation between factors, but there is an apparent negative correlation between the two in the Series group.
+
+## Model fitting
+  
+  According to the figure in the EDA part, it can be found that although the overall trend of the data is roughly the same, there are still noticeable differences between different genres, so I chose to use a multi-level model to fit the model.
+  I selected six variables: IMDb.Votes, num.country, Awards.Received, Awards.Nominated.For, Metacritic.Score and Rotten.Tomatoes.Score based on the corrplot chart I drew and added different types of genres. Intercept and slope. The following is my model:
+  
+
+```{r eval=FALSE, echo=TRUE}
+lmer_model = lmer(log(IMDb.Score)~log(IMDb.Votes)+log(num.country)+log(1+Awards.Received)+
+             log(1+Awards.Nominated.For)+log(1+Rotten.Tomatoes.Score)+log(1+Metacritic.Score)+
+             (1|Major.Genre),data =netflix1)
+```
+
+```{r include=FALSE}
+lmer_model = lmer(log(IMDb.Score)~log(IMDb.Votes)+log(num.country)+log(1+Awards.Received)+
+             log(1+Awards.Nominated.For)+log(1+Rotten.Tomatoes.Score)+log(1+Metacritic.Score)+
+             (log(num.country)|Major.Genre),data =netflix1)
+
+```
+
+# Result
+
+## Coefficients
+
+The following is the fixed effects of the model:
+
+|                               |Estimate   |Std. Error |df           |t value |Pr(>|t|)| 
+|:---:                          |:---:      |:---:      |:---:        |:---:   |:---:     |
+|(Intercept)                    |1.671816   |0.024781   |32.924125    |67.462  |< 0.0000000000000002 ***|
+|log(IMDb.Votes)                |0.010744   |0.002017   |3291.518154  |5.327   |0.00000010660308 ***|
+|log(num.country)               |0.015964   |0.003478   |8.932133     |4.590   |0.00134 ***|
+|log(1 + Awards.Received)       |0.031455   |0.006108   |3467.000188  |5.150   |0.00000027537285 ***|
+|log(1 + Awards.Nominated.For)  |0.036028   |0.005104   |3459.175145  |7.059   |0.00000000000201 ***|
+|log(1 + Rotten.Tomatoes.Score) |-0.006127  |0.002096   |3470.042095  |-2.923  |0.00349 ** |
+|log(1 + Metacritic.Score)      |-0.011671  |0.002472   |3471.628782  |-4.720  |0.00000244773816 ***|
+
+the following is the final model of :
+
+$$log(IMDb.Score)= 1.671816 + 0.010744\cdot log(IMDb.Votes) + 0.015964\cdot log(num.country) + 0.031455\cdot$$
+$$log(1+Awards.Received) + 0.036028\cdot log(1+Awards.Nominated.For) -0.011671\cdot log(1+Metacritic.Score)$$
+$$-0.006127\cdot log(1+Rotten.Tomatoes.Score)$$
+Through this model, we can find a fascinating phenomenon. For every 0.1 point increase in IMDb Score, Rotten Tomatoes and Metacritic scores will decrease by 1.1582% and 0.5998%, respectively.
+
+```{r}
+ranedf <- as.data.frame(ranef(lmer_model) $ Major.Genre)
+head(ranedf, num=10L)
+```
+
+# Discussion
+
+  By comparing the model and the EDA part, this model is more reasonable. The IMDb score is positively correlated with the number of votes, the number of nominated awards, and the number of mentions on IMDb. As these variables increase, the movie's IMDb score will be higher. The IMDb score and the Metacritic Score of Rotten Tomatoes are negatively correlated. I did not notice this obviously during the EDA process because the intercept of most of the generators in the Rotten Tomatoes graph is close to 0, and some Positive correlation.
+
+  Of course, this model also has some weaknesses. I did not add all the variables. For example, some negatively correlated variables and variables with too small a correlation were removed by me. Adding these variables may change the model.
+    
+\newpage
+# Reference
+Latest Netflix data with 26+ joined attributes: https://www.kaggle.com/ashishgup/netflix-rotten-tomatoes-metacritic-imdb
+
+# Appendix
+## EDA
+```{r warning=FALSE,fig.show="hold", out.width="50%"}
+netflix1 %>%
+  group_by(Major.Genre) %>%
+  dplyr::mutate(n=n()) %>%
+  ggplot(aes(y = fct_reorder(Major.Genre,n), fill=Major.Genre))+
+  geom_histogram(stat="count")
+
+
+ggplot(data = netflix)+
+  geom_bar(aes(x=Runtime, fill = Major.Genre),stat = "count")+
+    #theme(legend.key.size = unit(0.1, 'cm'))+
+  facet_wrap(~factor(Series.or.Movie))
+
+```
+
+
+```{r out.width="50%"}
+ggplot(data = netflix)+
+  geom_jitter(aes(y= Major.Lang, x = IMDb.Score, colour = Major.Genre),
+              alpha = 0.5)+
+  theme(legend.position="top")+
+  theme_bw()+
+  facet_wrap(~factor(Series.or.Movie))
+```
+
+```{r}
+options(scipen=999)
+summary(lmer_model)
+fixef(lmer_model)
+ranef(lmer_model)
+```
+
+
+```{r fig.show="hold", out.width="50%"}
+plot(lmer_model)
+qqmath(lmer_model)
+
+ggplot(data.frame(lev=hatvalues(lmer_model),pearson=residuals(lmer_model,type="pearson")),
+      aes(x=lev,y=pearson)) +
+    geom_point() +
+    theme_bw()
+```
+
